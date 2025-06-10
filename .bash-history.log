@@ -1,0 +1,10 @@
+2024-12-05.18:40:18  1004  cd 241205_P01_NvJ_WholeLiver/
+2024-12-05.18:40:19  1005  ll
+2024-12-05.18:40:30  1006  rm 241112_NvJ_WholeLiver.qmd
+2024-12-05.18:44:01  1007  cat /srv/shiny-server/labs/TOWERS/index.html 
+2024-12-05.18:45:03  1008  ll /gpfs/website/class/labs/TOWERS/
+2024-12-05.18:45:25  1009  ll /gpfs/website/class/labs/TOWERS/index.html 
+2024-12-05.18:45:29  1010  cat /gpfs/website/class/labs/TOWERS/index.html 
+2024-12-05.18:45:56  1011  cat /gpfs/website/class/test/labs/TOWERS/Towers.html 
+2024-12-05.18:48:44  1012  cat /srv/shiny-server/labs/TOWERS/index.html 
+2024-12-05.18:52:25  1013  vi /srv/shiny-server/labs/TOWERS/index.html 

@@ -1,0 +1,749 @@
+---
+title: "Whole Liver NvJ - Quarto Bulk RNAseq Form v1.1"
+format: html
+server: shiny
+execute:
+  cache: true
+---
+
+```{css, echo=FALSE}
+h1, h2, h3, h5, h6 {
+  text-align: center;
+}
+```
+
+```{css, echo=FALSE}
+.shiny-output-error { visibility: hidden; }
+```
+
+```{css, echo=FALSE}
+.shiny-output-error:before { visibility: hidden; }
+```
+
+```{r data-chunk,include=FALSE}
+#| context: setup
+library("RNAseqFunctions")
+library("DESeq2")
+library("ggplot2")
+library("ggrepel")
+library("pheatmap")
+library("WebGestaltR")
+
+#The current input format is a single RDS object containing a named list. Index 1 = data.frame of normalized counts. Index 2-n = uniquely named DESeq2 objects. All comparisons in all object will queriable by Quatro. The names of each object are used in the 'Choose a comparison' drop-down menu in the Differential Expression section, so they should be named informatively. Only one DESeq2 object is necessary, but you can add as many additional objects as you want to cover more complex experiments.
+
+exp <- readRDS("/vast/igc/analyses/april/APRIL/website/rna-seq_quatro/labs/TOWERS/241205_P01_NvJ_WholeLiver/Quarto_NvJ_WholeLiver.rds")
+
+```
+
+
+### Define two Conditions to Compare
+###### All plots and figures will ONLY contain samples from this comparison.
+
+```{r}
+
+inputPanel(
+selectInput("comp", "Choose a comparison:",
+      as.list(names(exp[2:length(exp)])), multiple = F, selected=names(exp)[2]
+    ),
+
+uiOutput("groupVariable"),
+uiOutput("upVar"),
+uiOutput("downVar"))
+
+#inputPanel(downloadButton("download_DEGs", "Download DE Statistics"),
+ #          downloadButton("download_norm", "Download Normalized Counts"),
+#           downloadButton("download_raw", "Download Raw Counts"))#,
+           #downloadButton("download_norm", "Download Normalized Counts"))
+
+
+```
+
+```{r}
+#| context: server
+comparison <- reactive({input$comp})
+
+output$groupVariable <-  renderUI({
+    selectInput(inputId = 'var',
+                  label = "Choose a variable:",
+                  choices = as.list(unique(gsub("\\_.*", "", resultsNames(exp[[as.character(comparison())]]))))[! as.list(unique(gsub("\\_.*", "", resultsNames(exp[[as.character(comparison())]])))) == "Intercept"])
+  })
+
+varib <- reactive({input$var})
+output$upVar <-  renderUI({
+    selectInput(inputId = 'upvar',
+                  label = "Up Variable:",
+                  choices = unique(colData(exp[[comparison()]])[[varib()]]), 
+                selected=unique(colData(exp[[comparison()]])[[varib()]])[1]  )
+  })
+output$downVar <-  renderUI({
+    selectInput(inputId = 'downvar',
+                label = "Down Variable:",
+                choices = unique(colData(exp[[comparison()]])[[varib()]]), 
+                selected=unique(colData(exp[[comparison()]])[[varib()]])[2]  )
+  })
+
+```
+
+
+## QC and Overall Metrics
+
+::: panel-tabset
+#### PCA Plot
+
+```{r}
+#| context: render
+
+fluidRow(
+
+column(6, 
+       inputPanel(
+  uiOutput("data1"),
+  uiOutput("data2"),
+  checkboxInput("pcaLabs", "Show Labels", FALSE))),
+
+column(6, 
+       inputPanel(
+         uiOutput("xval"),
+         uiOutput("yval"),
+  sliderInput("pointSize", "Point Size:", width=150,
+              min = 1, max = 20, step = 1, value=10, ticks=FALSE)
+       )))
+
+```
+
+```{r}
+#| panel: fill
+plotOutput("PCplot", inline = T)
+```
+
+#### Scree Plot
+
+```{r}
+#| panel: fill
+plotOutput("Scree", inline = T)
+```
+:::
+
+```{r}
+#| context: server
+# PCA inputs (based on comparison):
+comparison <- reactive({input$comp})
+pca <- reactive({prcomp(t(as.data.frame(counts(exp[[comparison()]], normalized = TRUE))))})
+loadings <- reactive({as.data.frame(pca()$x[])})
+
+# input for color:
+output$data1 <- renderUI({
+  selectInput(inputId = 'data1',
+              label = "Choose a color factor:",
+              as.list(colnames(colData(exp[[comparison()]]))[! colnames(colData(exp[[comparison()]])) == "sizeFactor"]),
+              multiple = F, 
+              selected=colnames(colData(exp[[comparison()]])))})
+# input for shape:
+output$data2 <-  renderUI({
+  selectInput(inputId = 'data2',
+              label = "Choose a shape factor:",
+              as.list(c("None", colnames(colData(exp[[comparison()]]))[! colnames(colData(exp[[comparison()]])) == "sizeFactor"])),
+              multiple = F, 
+              selected="None")})
+# input for x axis:
+output$xval <-  renderUI({
+  selectInput('xval', "X-axis:", as.list(colnames(loadings())),
+              multiple = F, width=150, selected = "PC1")})
+# input for y axis:
+output$yval <-  renderUI({
+  selectInput('yval', "Y-axis:", as.list(colnames(loadings())),
+              multiple = F, width=150, selected = "PC2")})
+
+mydata1 <- reactive({as.factor(colData(exp[[comparison()]])[[input$data1]])})
+mydata2 <- reactive({as.factor(colData(exp[[comparison()]])[[input$data2]])})
+
+pcx <- reactive({ loadings()[[input$xval]] })
+pcy <- reactive({ loadings()[[input$yval]] })
+
+xname <- reactive({ as.character(input$xval) })
+yname <- reactive({ as.character(input$yval) })
+
+varx <- reactive({paste0(substr(as.character(((pca()$sdev^2/sum(pca()$sdev^2))*100)[[which(colnames(loadings()) == xname())]]),1,5),"%")})
+vary <- reactive({paste0(substr(as.character(((pca()$sdev^2/sum(pca()$sdev^2))*100)[[which(colnames(loadings()) == yname())]]),1,5),"%")})
+
+psize <- reactive({input$pointSize})
+pcaLabs <- reactive({input$pcaLabs})
+
+output$PCplot<-renderPlot(
+  if(pcaLabs()){
+      if(as.character(input$data2) == "None"){
+        ggplot(data = as.data.frame(pca()$x[]), aes(x = pcx(), y = pcy(), color = mydata1()))+ 
+          geom_point(size = psize())+ 
+              Ol_Reliable()+ 
+              theme(axis.title = element_text(size=14), plot.title = element_text(size=18),
+                    axis.text = element_text(size=14), legend.text = element_text(size=12),
+                    legend.title = element_text(size=14))+
+          xlab(paste(xname(), "-", varx(), "of variance"))+
+          ylab(paste(yname(), "-", vary(), "of variance"))+
+          geom_text_repel(aes(label = row.names(colData(exp[[comparison()]]))), size=ceiling(log10(psize()+3)*5))+ 
+          ggtitle("PCA of normalized raw count data")+ 
+          labs(color = input$data1)
+      } else {
+        ggplot(data = as.data.frame(pca()$x[]), aes(x = pcx(), y = pcy(), color = mydata1(), shape = mydata2()))+ 
+          geom_point(size = psize())+ 
+              scale_shape_manual(values = seq(21, 21 + length(levels(mydata2())) - 1, 1))+ 
+              Ol_Reliable()+ 
+              theme(axis.title = element_text(size=14), plot.title = element_text(size=18), 
+                    axis.text = element_text(size=14), legend.text = element_text(size=12),
+                    legend.title = element_text(size=14))+
+                  xlab(paste(xname(), "-", varx(), "of variance"))+
+                  ylab(paste(yname(), "-", vary(), "of variance"))+
+                  geom_text_repel(aes(label = row.names(colData(exp[[comparison()]]))), size=ceiling(log10(psize()+3)*5))+ 
+                  ggtitle("PCA of normalized raw count data")+ 
+                  labs(color = input$data1, shape = input$data2)}
+    }else{
+      if(as.character(input$data2) == "None"){
+        ggplot(data = as.data.frame(pca()$x[]), aes(x = pcx(), y = pcy(), color = mydata1()))+ 
+          geom_point(size = psize())+ 
+          Ol_Reliable()+ 
+          theme(axis.title = element_text(size=14), plot.title = element_text(size=18),
+                axis.text = element_text(size=14), legend.text = element_text(size=12),
+                legend.title = element_text(size=14))+
+                xlab(paste(xname(), "-", varx(), "of variance"))+
+                ylab(paste(yname(), "-", vary(), "of variance"))+
+          ggtitle("PCA of normalized raw count data")+ 
+          labs(color = input$data1)
+      } else{
+        ggplot(data = as.data.frame(pca()$x[]),  aes(x = pcx(), y = pcy(), color = mydata1(), shape = mydata2()))+ 
+          geom_point(size = psize())+ 
+          scale_shape_manual(values = seq(21, 21 + length(levels(mydata2())) - 1, 1))+ 
+          Ol_Reliable()+ 
+          theme(axis.title = element_text(size=14), plot.title = element_text(size=18), 
+                axis.text = element_text(size=14), legend.text = element_text(size=12),
+                legend.title = element_text(size=14))+
+          xlab(paste(xname(), "-", varx(), "of variance"))+
+          ylab(paste(yname(), "-", vary(), "of variance"))+
+          ggtitle("PCA of normalized raw count data")+
+          labs(color = input$data1, shape = input$data2)}
+      }, 
+  height=600, width=750)
+
+
+output$Scree <-renderPlot({ggplot(data = data.frame(PC=1:length(pca()$sdev^2),
+                                                    Eigenvalue=pca()$sdev^2), aes(x = PC, y = Eigenvalue))+ 
+    geom_line(size=1)+ geom_point(size = 3)+ 
+    Ol_Reliable()+ 
+    theme(axis.title = element_text(size=14), plot.title = element_text(size=18), 
+          axis.text = element_text(size=14))+
+    ggtitle("Scree Plot")+ ylab("Eigenvalue")+ xlab("Principal Component")},
+    height=600,width=750)
+
+```
+
+#### Gene-wise Expression
+
+```{r, warning=FALSE}
+
+inputPanel(
+
+selectizeInput("gene", "Choose a gene:",
+      as.list(row.names(exp[[1]])), multiple = F),
+
+selectInput("normVar", "Choose a grouping factor:",
+              as.list(colnames(colData(exp[[2]]))[! colnames(colData(exp[[2]])) == "sizeFactor"]),
+              multiple = F, 
+              selected=colnames(colData(exp[[2]]))[! colnames(colData(exp[[2]])) == "sizeFactor"][1]),
+
+checkboxInput("normLabs", "Show Labels", FALSE)
+)
+
+plotOutput("genePlot")
+```
+
+```{r, warning=FALSE}
+#| context: server
+
+gene <- reactive({as.character(input$gene)})
+count <- reactive({as.data.frame(exp[[2]]@assays@data)[[as.character(input$gene)]]})
+normLabs <- reactive({input$normLabs})
+NORMdata <- reactive({ 
+  f <- as.data.frame(merge(as.data.frame(t(exp[[1]][as.character(input$gene),])),
+                      as.data.frame(exp[[2]]@colData), by="row.names", all=F))
+  colnames(f)[2] <- "Gene"
+  f
+  })
+
+groupVar <- reactive({as.factor(NORMdata()[[input$normVar]])})
+
+output$genePlot <- renderPlot(
+  if(normLabs()){
+    ggplot(data = NORMdata(),
+      aes(y = Gene, x = groupVar(), color = groupVar()))+ 
+    geom_boxplot()+ 
+    geom_jitter(height=0, width = 0.1)+ 
+          Ol_Reliable()+ 
+          theme(axis.title = element_text(size=14), plot.title = element_text(size=18),
+                axis.text.y = element_text(size=14), legend.position = "none",
+                axis.text.x = element_text(angle=45, vjust=1, hjust=1, size=14))+
+                ylab(paste(gene(), "Normalized Counts"))+
+                xlab("")+
+          ggtitle(paste(gene(), "Expression"))+
+       geom_text_repel(aes(label=Row.names))
+  } else {
+    ggplot(data = NORMdata(),
+      aes(y = Gene, x = groupVar(), color = groupVar()))+ 
+    geom_boxplot()+ 
+    geom_jitter(height=0, width = 0.1)+ 
+          Ol_Reliable()+ 
+          theme(axis.title = element_text(size=14), plot.title = element_text(size=18),
+                axis.text.y = element_text(size=14), legend.position = "none",
+                axis.text.x = element_text(angle=45, vjust=1, hjust=1, size=14))+
+                ylab(paste(gene(), "Normalized Counts"))+
+                xlab("")+
+          ggtitle(paste(gene(), "Expression"))
+  }
+)
+```
+
+## Differential Expression
+
+::: panel-tabset
+#### Volcano Plot
+```{r}
+#| panel: fill
+
+plotOutput("Volcano", inline = T)
+```
+
+#### DE Statistics
+
+```{r}
+#| panel: fill
+dataTableOutput("Table1")
+
+```
+
+#### DEG Counts
+
+```{r}
+#| panel: fill
+#textOutput("lfc0")
+#textOutput("lfc05")
+#textOutput("lfc1")
+tableOutput('DEGtable')
+```
+:::
+
+```{r}
+#| context: server
+
+up <- reactive({input$upvar})
+down <- reactive({input$downvar})
+varib <- reactive({input$var})
+comparison <- reactive({input$comp})
+
+degData <- reactive({as.data.frame(makeComp(exp[[comparison()]], varib(), up(), down()))})
+
+output$Table1 <- renderDataTable(degData()[c(7,1:3,6,8)], options = list(pageLength = 10))
+
+output$Volcano <- renderPlot(eRupt(degData(), FCsig = 0.5)+
+                               theme(axis.title = element_text(size=14), 
+                                     plot.title = element_text(size=18),
+                                     axis.text = element_text(size=14), 
+                                     legend.position = "none",),
+                             height=600, width=750)
+
+output$DEGtable <- renderTable(data.frame(`log2FC Threshold`=c(0, 0.5, 1), 
+           `nGenes UP`= c(length(getDEGs(degData(), lfc = 0, mode = "vector", direction = "up")),
+                          length(getDEGs(degData(), lfc = 0.5, mode = "vector", direction = "up")),
+                          length(getDEGs(degData(), lfc = 1, mode = "vector", direction = "up"))), 
+           `nGenes DOWN`= c(length(getDEGs(degData(), lfc = 0, mode = "vector", direction = "down")),
+                            length(getDEGs(degData(), lfc = 0.5, mode = "vector", direction = "down")),
+                            length(getDEGs(degData(), lfc = 1, mode = "vector", direction = "down")))))
+
+
+
+output$download_DEGs <- downloadHandler(
+      filename = function() {
+        paste0(comparison(), '_DE_Info.tsv', sep='')
+      },
+      content = function(file) {
+        write.table(degData(), file, sep="\t", quote=F, col.names = T, row.names = F)
+      }
+    )
+
+norm <- reactive({as.data.frame(counts(exp[[comparison()]], normalized = TRUE))})
+output$download_norm <- downloadHandler(
+      filename = function() {
+        paste0(comparison(), '_Normalized_Counts.tsv', sep='')
+      },
+      content = function(file) {
+        write.table(norm(), file, sep="\t", quote=F, col.names = T, row.names = T)
+      }
+    )
+
+raw <- reactive({as.data.frame(counts(exp[[comparison()]]))})
+output$download_raw <- downloadHandler(
+      filename = function() {
+        paste0(comparison(), '_Raw_Counts.tsv', sep='')
+      },
+      content = function(file) {
+        write.table(raw(), file, sep="\t", quote=F, col.names = T, row.names = T)
+      }
+    )
+
+
+#output$lfc0 <- renderText({paste("log2FC cut-off = 0 - ", getDEGs(makeComp(exp[[comparison()]], varib(), up(), down()), lfc = 0))  })
+#output$lfc05 <- renderText({paste("log2FC cut-off = 0.5 - ", getDEGs(makeComp(exp[[comparison()]], varib(), up(), down()), lfc = 0.5))  })
+#output$lfc1 <- renderText({paste("log2FC cut-off = 1 - ", getDEGs(makeComp(exp[[comparison()]], varib(), up(), down()), lfc = 1))  })
+```
+
+##### Run a Gene Ontology (GO) analysis on your selected comparison
+
+###### Please note: GO analysis may take a few minutes.
+
+```{r}
+
+inputPanel(
+  selectInput("GOmode", "Analysis:",
+              c("ORA", "GSEA"),
+              multiple = F,
+              selected="ORA"),
+  
+  uiOutput("spButton"),
+  uiOutput("oraLFC"),
+  #sliderInput("lfcThresh", "log2FC cut-off (ORA):", width=150,
+  #            min = 0, max = 5, step = 0.25, value=0.5, ticks=FALSE),
+  div(style = "width:500px;", uiOutput("dbButton")),
+  "", "",
+  fluidRow(actionButton("GObutton", "Run GO Analysis!"))
+)
+
+#inputPanel(
+#  fluidRow(div(style = "width:500px;", uiOutput("dbButton"))),
+#  fluidRow(actionButton("GObutton", "Run GO Analysis!"))
+#)
+
+```
+
+::: panel-tabset
+#### GO Results
+
+```{r, error=FALSE, warning = FALSE, message = FALSE}
+inputPanel(
+  sliderInput("nTerms", "Num Terms Plotted:",
+              min = 1, max = 50, step = 1, value=20, ticks=FALSE),
+  sliderInput("fSizeID", "Axis Font Size:",
+              min = 3, max = 20, step = 1, value=10, ticks=FALSE)
+)
+```
+
+```{r, error=FALSE, warning = FALSE, message = FALSE}
+#| panel: fill
+plotOutput("GO_plot", inline = T)
+```
+
+#### GO Data Table
+
+```{r, error=FALSE}
+#| panel: fill
+downloadLink("godownload", "Download GO Results")
+dataTableOutput("GODT")
+```
+:::
+
+```{r, error=FALSE, warning = FALSE, message = FALSE}
+#| context: server
+comparison <- reactive({input$comp})
+varib <- reactive({input$var})
+up <- reactive({input$upvar})
+down <- reactive({input$downvar})
+output$spButton <-  renderUI({
+   selectInput("GOsp", "Species:",
+              listOrganism(),
+              multiple = F,
+              selected=listOrganism()[10])})
+species <- reactive({input$GOsp})
+output$dbButton <-  renderUI({
+  t <- listGeneSet(species())
+  t <- t$name[t$idType == "entrezgene"]
+  
+  selectInput("GOdb", "Gene Set:", 
+              t, multiple = F, width="500px")
+  })
+GOMODE <- reactive({as.character(input$GOmode)})
+
+output$oraLFC <-  renderUI({
+  
+  if(GOMODE()=="ORA"){
+    sliderInput("lfcThresh", "log2FC cut-off:", width=150,
+              min = 0, max = 5, step = 0.25, value=0.5, ticks=FALSE)
+  } else{ "" }
+  })
+
+sp <- reactive({as.character(input$GOsp)})
+db <- reactive({as.character(input$GOdb)})
+lfcgo <- reactive({as.numeric(input$lfcThresh)})
+keeprows <- reactive({as.numeric(input$nTerms)})
+yfontSize <- reactive({as.numeric(input$fSizeID)})
+
+goData <- reactive({makeComp(exp[[comparison()]], varib(), up(), down())})
+GOresults <- eventReactive(input$GObutton, {
+  
+  if(GOMODE() == "ORA"){
+    WebGestalt_Pipe(mode=GOMODE(), goData(), alpha=0.05, FC=lfcgo(),
+                  DB=db(), species=sp())
+  } else{
+    WebGestalt_Pipe(mode=GOMODE(), goData(), alpha=0.05,
+                  DB=db(), species=sp())
+  }
+  
+  
+})
+
+drawgodt <- reactive({
+  if(GOMODE() == "ORA"){
+    h <- setNames(GOresults()[c(1,5:10,12)], 
+                  c("ID", "Set Size", "nHits", "Expected", "Enrichment Ratio", "p", "pAdj", "Genes"))
+  } else {
+    h <- setNames(GOresults()[! colnames(GOresults()) %in% c("link", "enrichmentScore", "plotPath", "leadingEdgeId", "geneSet", "description")],
+                  c("ID", "Enrichment Score", "p", "pAdj", "Set Size", "nHits", "Genes"))
+  }
+})
+
+output$GODT <- renderDataTable(
+  drawgodt(), options = list(pageLength = 8))
+
+GOplotData <- reactive({
+  f <- as.data.frame(GOresults())[1:keeprows(),]
+  if(GOMODE() == "ORA"){
+    f$ID <- factor(f$ID, levels=unique(f$ID[order(f$enrichmentRatio, decreasing = F)]))
+  } else{
+    f$ID <- factor(f$ID, levels=unique(f$ID[order(f$normalizedEnrichmentScore, decreasing = F)]))
+  }
+  
+  
+  f
+})
+
+output$GO_plot <- renderPlot(
+  
+  if(GOMODE() == "ORA"){
+    ggplot(GOplotData(), aes(x=enrichmentRatio, y=ID, fill=-log10(FDR+1e-15)*sign(enrichmentRatio)))+
+    geom_col(colour="black")+
+    geom_vline(xintercept = 0)+ Ol_Reliable()+
+    ylab("")+ xlab("Enrichment Ratio")+
+    theme(axis.title = element_text(size=14), plot.title = element_text(size=18),
+          axis.text.y=element_text(size=yfontSize()), axis.text.x=element_text(size=12),
+          legend.text = element_text(size=10), legend.title = element_text(size=12))+
+    scale_fill_gradient2("-log10(FDR)", low="#2166AC", high="#B2182B", mid="#F7F7F7", midpoint = 0, 
+                         limits=c(max(abs(-log10(GOplotData()[["FDR"]]+1e-15) ))*-1, 
+                                  max(abs(-log10(GOplotData()[["FDR"]]+1e-15) )) ))
+  } else {
+    ggplot(GOplotData(), aes(x=normalizedEnrichmentScore, y=ID, fill=-log10(FDR+1e-15)*sign(normalizedEnrichmentScore)))+
+    geom_col(colour="black")+
+    geom_vline(xintercept = 0)+ Ol_Reliable()+
+    ylab("")+ xlab("Enrichment Ratio")+
+    theme(axis.title = element_text(size=14), plot.title = element_text(size=18),
+          axis.text.y=element_text(size=yfontSize()), axis.text.x=element_text(size=12),
+          legend.text = element_text(size=10), legend.title = element_text(size=12))+
+    scale_fill_gradient2("-log10(FDR)", low="#2166AC", high="#B2182B", mid="#F7F7F7", midpoint = 0, 
+                         limits=c(max(abs(-log10(GOplotData()[["FDR"]]+1e-15) ))*-1, 
+                                  max(abs(-log10(GOplotData()[["FDR"]]+1e-15) )) ))
+  }, 
+  height=750, width=750)
+
+
+output$godownload <- downloadHandler(
+    filename = function() {
+      paste0(GOMODE(), "_", db(), "_", varib(), "_", up(), "_v_", down(), ".tsv")
+    },
+    content = function(file) {
+      write.table(as.data.frame(GOresults()), file, sep="\t", quote=F, col.names = T, row.names = F)
+    })
+
+# is there a way to add a download button?
+```
+
+## Genes of Interest
+
+##### Query the expression of a user-defined gene set
+
+```{r, warning=FALSE}
+
+inputPanel(
+  div(style = "width:1000px;", selectizeInput("goilist", "Choose Genes (type or paste a comma-separated list):",
+      as.list(row.names(exp[[1]])), 
+      multiple = T, options=list(delimiter = ",", create = TRUE),
+      selected=NULL), cellArgs = list(style = "width: 2000px;"))
+)
+
+inputPanel(
+  checkboxInput("heatALL", "Plot All Samples", FALSE)
+)
+```
+
+::: panel-tabset
+
+#### Heatmap
+
+```{r, warning=FALSE}
+inputPanel(
+  selectInput("goiVarH", "Choose a grouping factor:",
+              as.list(colnames(colData(exp[[2]]))[! colnames(colData(exp[[2]])) == "sizeFactor"]),
+              multiple = F,
+              selected=colnames(colData(exp[[2]]))[! colnames(colData(exp[[2]])) == "sizeFactor"][1]),
+  
+  sliderInput("fontSizeR", "Font Size (Genes):", width=200,
+              min = 1, max = 30, step = 1, value=8, ticks=FALSE),
+  
+  sliderInput("fontSizeC", "Font Size (Samples):", width=200,
+              min = 1, max = 30, step = 1, value=8, ticks=FALSE),
+  
+  selectInput("clusterdist", "Clustering Distance:",
+              c('correlation', 'euclidean', 'maximum', 'manhattan', 'canberra', 'binary', 'minkowski'),
+              multiple = F,
+              selected='correlation'),
+  
+)
+```
+
+```{r}
+#| panel: fill
+plotOutput("goiHeat", inline = T)
+```
+
+#### Set Expression
+
+```{r, warning=FALSE}
+inputPanel(
+  selectInput("goiVarZ", "Choose a grouping factor:",
+              as.list(colnames(colData(exp[[2]]))[! colnames(colData(exp[[2]])) == "sizeFactor"]),
+              multiple = F,
+              selected=colnames(colData(exp[[2]]))[! colnames(colData(exp[[2]])) == "sizeFactor"][1]),
+  
+  checkboxInput("goiLabs", "Show Labels", FALSE)
+)
+```
+
+```{r}
+#| panel: fill
+plotOutput("goiBox", inline = T)
+```
+:::
+
+```{r}
+#| context: server
+
+# options:
+goi <- reactive({input$goilist})
+fsizeR <- reactive({input$fontSizeR})
+fsizeC <- reactive({input$fontSizeC})
+showGoiLabs <- reactive({input$goiLabs})
+all <- reactive({input$heatALL})
+
+norm_counts <- reactive({if(all() ==F){
+  as.data.frame(counts(exp[[comparison()]], normalized = TRUE))
+}else{
+  exp[[1]]
+}})
+
+heatMeta <- reactive({if(all() ==F){
+  as.data.frame(exp[[comparison()]]@colData)
+}else{
+  as.data.frame(exp[[2]]@colData)
+}})
+
+NORMdata <- reactive({ 
+  f <- as.data.frame(merge(as.data.frame(t(norm_counts()[as.character(input$gene),])),
+                      heatMeta(), by="row.names", all=F))
+  colnames(f)[2] <- "Gene"
+  f
+  })
+comparison <- reactive({input$comp})
+varib <- reactive({input$var})
+up <- reactive({input$upvar})
+down <- reactive({input$downvar})
+cdist <- reactive({as.character(input$clusterdist)})
+
+# create reactive data objects:
+goiBoxData <- reactive({
+  if(is.null(input$goilist)){
+    s <- SetScores(norm_counts(), goi=getDEGs(results = makeComp(exp[[comparison()]], varib(), up(), down()), lfc = 0.5, direction = "all", mode = "vector"),
+                 meta=heatMeta()[!colnames(heatMeta())=="Sample"])
+  } else{
+    s <- SetScores(norm_counts(), goi=as.character(input$goilist),
+                 meta=heatMeta()[!colnames(heatMeta())=="Sample"])
+  }
+  s
+  })
+
+
+
+goivarZ <- reactive({as.factor(goiBoxData()[[as.character(input$goiVarZ)]])})
+goivarH <- reactive({as.factor(goiBoxData()[[as.character(input$goiVarH)]])})
+plotdata <- reactive({ 
+  
+  if(is.null(input$goilist)){
+    k <- as.data.frame(norm_counts()[row.names(norm_counts()) %in% getDEGs(results = makeComp(exp[[comparison()]], varib(), up(), down()), lfc = 0.5, direction = "all", mode = "vector") & ! rowSums(norm_counts())==0,])
+  } else{
+    k <- as.data.frame(norm_counts()[row.names(norm_counts()) %in% input$goilist & ! rowSums(norm_counts())==0,])
+  }
+  k
+  })
+plottitle <- reactive({
+  if(is.null(input$goilist)){
+    input$comp
+  }else{
+    paste(nrow(plotdata()), "Genes")
+  } })
+
+# render plots:
+output$goiBox <- renderPlot(
+  if(showGoiLabs()){
+    ggplot(goiBoxData(), aes(x=goivarZ(), y=Score, fill=goivarZ()))+
+      geom_boxplot(colour="black", outlier.size = 0)+
+      geom_jitter(height = 0, width=0.1, colour="black")+
+      Ol_Reliable()+
+      theme(axis.title = element_text(size=14), plot.title = element_text(size=18),
+            axis.text.y = element_text(size=14), legend.position = "none",
+            axis.text.x = element_text(angle=45, vjust=1, hjust=1, size=14))+
+      ylab("Median Gene Set Z-score")+xlab("")+
+      ggtitle(paste("Median Expression of", plottitle()))+
+      geom_text_repel(aes(label=Sample))
+  }else{
+    ggplot(goiBoxData(), aes(x=goivarZ(), y=Score, fill=goivarZ()))+
+      geom_boxplot(colour="black", outlier.size = 0)+
+      geom_jitter(height = 0, width=0.1, colour="black")+
+      Ol_Reliable()+
+      theme(axis.title = element_text(size=14), plot.title = element_text(size=18),
+            axis.text.y = element_text(size=14), legend.position = "none",
+            axis.text.x = element_text(angle=45, vjust=1, hjust=1, size=14))+
+      ylab("Median Gene Set Z-score")+xlab("")+
+      ggtitle(paste("Median Expression of", plottitle()))
+  },
+  height=600, width=750)
+
+output$goiHeat <- renderPlot({pheatmap(plotdata(), 
+                                       color = c("#2166AC", "#4393C3", "#92C5DE", "#D1E5F0", "#F7F7F7", "#FDDBC7", "#F4A582", "#D6604D", "#B2182B"), 
+                                       scale="row", clustering_distance_rows =  cdist(), 
+                                       clustering_distance_cols = cdist(), angle_col = "90",
+                                       treeheight_row = 20, treeheight_col = 20,
+                                       annotation_col = as.data.frame(exp[[2]]@colData)[as.character(input$goiVarH)],
+                                       annotation_names_col = FALSE, fontsize_row =fsizeR(), 
+                                       main=paste0("Heatmap of ", plottitle(), "\n"),
+                                       fontsize_col = fsizeC(), border_color = "black")},
+                             height=750, width=750)
+```
+
+### Data Downloads
+```{r}
+inputPanel(downloadButton("download_DEGs", "Download DE Statistics"),
+           downloadButton("download_norm", "Download Normalized Counts"),
+           downloadButton("download_raw", "Download Raw Counts"))#,
+           #downloadButton("download_norm", "Download Normalized Counts"))
+```
+
+
+
+
+
+
+
+
+

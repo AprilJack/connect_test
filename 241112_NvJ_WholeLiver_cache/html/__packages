@@ -1,0 +1,16 @@
+shiny
+RNAseqFunctions
+BiocGenerics
+S4Vectors
+IRanges
+GenomeInfoDb
+GenomicRanges
+matrixStats
+MatrixGenerics
+Biobase
+SummarizedExperiment
+DESeq2
+ggplot2
+ggrepel
+pheatmap
+WebGestaltR
