@@ -28,6 +28,7 @@ library("ggplot2")
 library("ggrepel")
 library("pheatmap")
 library("WebGestaltR")
+library("gridExtra")
 
 #The current input format is a single RDS object containing a named list. Index 1 = data.frame of normalized counts. Index 2-n = uniquely named DESeq2 objects. All comparisons in all object will queriable by Quatro. The names of each object are used in the 'Choose a comparison' drop-down menu in the Differential Expression section, so they should be named informatively. Only one DESeq2 object is necessary, but you can add as many additional objects as you want to cover more complex experiments.
 

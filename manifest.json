@@ -1717,6 +1717,30 @@
         "Built": "R 4.4.3; x86_64-pc-linux-gnu; 2025-03-13 02:16:15 UTC; unix"
       }
     },
+    "gridExtra": {
+      "Source": "CRAN",
+      "Repository": "https://packagemanager.posit.co/cran/latest",
+      "description": {
+        "Package": "gridExtra",
+        "Authors@R": "c(person(\"Baptiste\", \"Auguie\",\n    email = \"baptiste.auguie@gmail.com\",\n    role = c(\"aut\", \"cre\")), person(\"Anton\", \"Antonov\",\n    email = \"tonytonov@gmail.com\",\n    role = c(\"ctb\")))",
+        "License": "GPL (>= 2)",
+        "Title": "Miscellaneous Functions for \"Grid\" Graphics",
+        "Type": "Package",
+        "Description": "Provides a number of user-level functions to work with \"grid\"\n    graphics, notably to arrange multiple grid-based plots on a page, and draw\n    tables.",
+        "Version": "2.3",
+        "VignetteBuilder": "knitr",
+        "Imports": "gtable, grid, grDevices, graphics, utils",
+        "Suggests": "ggplot2, egg, lattice, knitr, testthat",
+        "RoxygenNote": "6.0.1",
+        "NeedsCompilation": "no",
+        "Packaged": "2017-09-08 22:52:09 UTC; baptiste",
+        "Author": "Baptiste Auguie [aut, cre],\n  Anton Antonov [ctb]",
+        "Maintainer": "Baptiste Auguie <baptiste.auguie@gmail.com>",
+        "Repository": "CRAN",
+        "Date/Publication": "2017-09-09 14:12:08 UTC",
+        "Built": "R 4.4.3; ; 2025-03-13 02:31:01 UTC; unix"
+      }
+    },
     "gtable": {
       "Source": "CRAN",
       "Repository": "https://packagemanager.posit.co/cran/latest",
@@ -3414,15 +3438,15 @@
       "checksum": "ed70b5140b7e3b778a48b43d9cfcd3a9"
     },
     "241112_NvJ_WholeLiver_cache/html/__packages": {
-      "checksum": "cb171f346cdc28b6827a4bdb08e56bcd"
+      "checksum": "c2fa92af5571e890d3422eee8a16578c"
     },
-    "241112_NvJ_WholeLiver_cache/html/data-chunk_45b21ef92896cccc2cdb0d64cb8c6f6a.RData": {
-      "checksum": "e3fa923d406b6b5fd66a19399f9b67fd"
+    "241112_NvJ_WholeLiver_cache/html/data-chunk_e7c917235a0b081c4a01db9cba442ac2.RData": {
+      "checksum": "28210ed5ea81411145b72dfd0f464456"
     },
-    "241112_NvJ_WholeLiver_cache/html/data-chunk_45b21ef92896cccc2cdb0d64cb8c6f6a.rdb": {
+    "241112_NvJ_WholeLiver_cache/html/data-chunk_e7c917235a0b081c4a01db9cba442ac2.rdb": {
       "checksum": "671caf73edf767d0649bef66865b4ca2"
     },
-    "241112_NvJ_WholeLiver_cache/html/data-chunk_45b21ef92896cccc2cdb0d64cb8c6f6a.rdx": {
+    "241112_NvJ_WholeLiver_cache/html/data-chunk_e7c917235a0b081c4a01db9cba442ac2.rdx": {
       "checksum": "23d07de315f019a579c6cf306105e296"
     },
     "241112_NvJ_WholeLiver_cache/html/unnamed-chunk-1_9daa4a2e6e15cf0b841592d7b1e05844.RData": {
@@ -3702,10 +3726,10 @@
       "checksum": "d828775275749701b48bd9d958814111"
     },
     "241112_NvJ_WholeLiver.html": {
-      "checksum": "a1805205585860ffd7838a6410f44f31"
+      "checksum": "f8aaa18aa1c061294f3f7c8ca10d320f"
     },
     "241112_NvJ_WholeLiver.qmd": {
-      "checksum": "96379a88866ca1615f00f941725e72d6"
+      "checksum": "4dcd4cc62a1a703ac28750439f318df6"
     },
     "Quarto_NvJ_WholeLiver.rds": {
       "checksum": "911b97b8b6ffa0fa4cbc4c60830c67ce"
